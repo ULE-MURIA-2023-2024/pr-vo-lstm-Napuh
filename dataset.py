@@ -33,8 +33,26 @@ class VisualOdometryDataset(Dataset):
                 ground_truth_data = self.read_ground_truth(aux_path)
                 interpolated_ground_truth = self.interpolate_ground_truth(
                     rgb_paths, ground_truth_data)
+                
+            # print(len(rgb_paths))
+            # print(len(interpolated_ground_truth))
+            # misma len
 
             # TODO: create sequences
+            for i in range(1, len(rgb_paths), 2):
+
+                if not validation:
+                    position_first_image = np.array(interpolated_ground_truth[i-1][1])
+                    position_second_image = np.array(interpolated_ground_truth[i][1])
+                    difference = np.subtract(position_second_image, position_first_image)
+                else:
+                    difference = None
+
+                self.sequences.append((rgb_paths[i-1][0], #timestamp imagen i-1
+                                       rgb_paths[i-1][1], # path imagen i-1
+                                       rgb_paths[i][0], # timestamp imagen i
+                                       rgb_paths[i][1], # path imagen i
+                                       difference)) # diferencia entre las posiciones
 
         self.transform = transform
         self.sequence_length = sequence_length
@@ -47,12 +65,35 @@ class VisualOdometryDataset(Dataset):
 
         # Load sequence of images
         sequence_images = []
-        ground_truth_pos = []
+        # ground_truth_pos = []
         timestampt = 0
 
-        # TODO: return the next sequence
+        _, path_i_minus_1, timestamp_i, path_i, difference = self.sequences[idx]
 
-        return sequence_images, ground_truth_pos, timestampt
+        # Load images
+        image_i_minus_1 = cv2.imread(path_i_minus_1)
+        image_i = cv2.imread(path_i)
+
+        # Convert images to RGB (OpenCV loads images in BGR format)
+        image_i_minus_1 = cv2.cvtColor(image_i_minus_1, cv2.COLOR_BGR2RGB)
+        image_i = cv2.cvtColor(image_i, cv2.COLOR_BGR2RGB)
+
+        # Apply transformations
+        image_i_minus_1 = self.transform(image_i_minus_1)
+        image_i = self.transform(image_i)
+
+        sequence_images.append(image_i_minus_1)
+        sequence_images.append(image_i)
+
+        # ground_truth_pos.append(difference)
+        timestampt = timestamp_i
+
+        sequence_images = torch.stack(sequence_images)
+
+        if difference is None:
+            return sequence_images, torch.Tensor([0]), timestampt
+        else:
+            return sequence_images, torch.Tensor(difference), timestampt
 
     def read_images_paths(self, dataset_path: str) -> Tuple[float, str]:
 
